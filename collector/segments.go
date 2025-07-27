@@ -43,7 +43,7 @@ func (c *SegmentCollector) Collect(ch chan<- prometheus.Metric) {
 	ctx, cancel := context.WithTimeout(context.Background(), 2*time.Second)
 	defer cancel()
 
-	cmd := exec.CommandContext(ctx, "vswitch", c.component, "list.segments")
+	cmd := exec.CommandContext(ctx, "vswitchd", c.component, "list.segments")
 	out, err := cmd.Output()
 	if err != nil {
 		log.Printf("[SegmentCollector] Failed to execute 'vswitch %s list.segments': %v", c.component, err)
