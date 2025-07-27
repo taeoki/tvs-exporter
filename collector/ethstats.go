@@ -1,4 +1,3 @@
-// collector/ethstats.go
 package collector
 
 import (
@@ -13,27 +12,27 @@ import (
 )
 
 type EthStatsCollector struct {
-	rxDescTotal *prometheus.Desc
-	rxDoneTotal *prometheus.Desc
-	txDescTotal *prometheus.Desc
-	txDoneTotal *prometheus.Desc
+	rxPackets *prometheus.Desc
+	rxBytes   *prometheus.Desc
+	txPackets *prometheus.Desc
+	txBytes   *prometheus.Desc
 }
 
 func NewEthStatsCollector() *EthStatsCollector {
 	labels := []string{"port"}
 	return &EthStatsCollector{
-		rxDescTotal: prometheus.NewDesc("ethstats_rx_desc_total", "HW RX Descriptors", labels, nil),
-		rxDoneTotal: prometheus.NewDesc("ethstats_rx_done_total", "HW RX Done", labels, nil),
-		txDescTotal: prometheus.NewDesc("ethstats_tx_desc_total", "HW TX Descriptors", labels, nil),
-		txDoneTotal: prometheus.NewDesc("ethstats_tx_done_total", "HW TX Done", labels, nil),
+		rxPackets: prometheus.NewDesc("ethstats_rx_packets_total", "HW RX Packets", labels, nil),
+		rxBytes:   prometheus.NewDesc("ethstats_rx_bytes_total", "HW RX Bytes", labels, nil),
+		txPackets: prometheus.NewDesc("ethstats_tx_packets_total", "HW TX Packets", labels, nil),
+		txBytes:   prometheus.NewDesc("ethstats_tx_bytes_total", "HW TX Bytes", labels, nil),
 	}
 }
 
 func (c *EthStatsCollector) Describe(ch chan<- *prometheus.Desc) {
-	ch <- c.rxDescTotal
-	ch <- c.rxDoneTotal
-	ch <- c.txDescTotal
-	ch <- c.txDoneTotal
+	ch <- c.rxPackets
+	ch <- c.rxBytes
+	ch <- c.txPackets
+	ch <- c.txBytes
 }
 
 func (c *EthStatsCollector) Collect(ch chan<- prometheus.Metric) {
@@ -44,29 +43,31 @@ func (c *EthStatsCollector) Collect(ch chan<- prometheus.Metric) {
 	}
 
 	scanner := bufio.NewScanner(bytes.NewReader(out))
-
 	var port string
 	for scanner.Scan() {
-		line := scanner.Text()
-		line = strings.TrimSpace(line)
-
+		line := strings.TrimSpace(scanner.Text())
 		if strings.HasPrefix(line, "Port:") {
 			port = strings.TrimSpace(strings.TrimPrefix(line, "Port:"))
 			continue
 		}
 
-		if strings.HasPrefix(line, "HW RX Descriptors:") {
+		if port == "" {
+			continue
+		}
+
+		switch {
+		case strings.HasPrefix(line, "HW RX Packets:"):
 			val := extractValue(line)
-			ch <- prometheus.MustNewConstMetric(c.rxDescTotal, prometheus.GaugeValue, val, port)
-		} else if strings.HasPrefix(line, "HW RX Done:") {
+			ch <- prometheus.MustNewConstMetric(c.rxPackets, prometheus.CounterValue, val, port)
+		case strings.HasPrefix(line, "HW RX Bytes:"):
 			val := extractValue(line)
-			ch <- prometheus.MustNewConstMetric(c.rxDoneTotal, prometheus.GaugeValue, val, port)
-		} else if strings.HasPrefix(line, "HW TX Descriptors:") {
+			ch <- prometheus.MustNewConstMetric(c.rxBytes, prometheus.CounterValue, val, port)
+		case strings.HasPrefix(line, "HW TX Packets:"):
 			val := extractValue(line)
-			ch <- prometheus.MustNewConstMetric(c.txDescTotal, prometheus.GaugeValue, val, port)
-		} else if strings.HasPrefix(line, "HW TX Done:") {
+			ch <- prometheus.MustNewConstMetric(c.txPackets, prometheus.CounterValue, val, port)
+		case strings.HasPrefix(line, "HW TX Bytes:"):
 			val := extractValue(line)
-			ch <- prometheus.MustNewConstMetric(c.txDoneTotal, prometheus.GaugeValue, val, port)
+			ch <- prometheus.MustNewConstMetric(c.txBytes, prometheus.CounterValue, val, port)
 		}
 	}
 }
