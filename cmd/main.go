@@ -43,7 +43,7 @@ func main() {
 
 		// 모드별 collector 등록
 		switch mode {
-		case "tor":
+		case "gtor":
 			prometheus.MustRegister(collector.NewEthStatsCollector())
 		case "snat", "dhcp":
 			// 아직 별도 collector가 없으면 생략 가능
