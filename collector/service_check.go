@@ -10,7 +10,6 @@ import (
 type ServiceCollector struct {
 	serviceName string
 	upDesc      *prometheus.Desc
-	isActive    bool
 }
 
 func NewServiceCollector(serviceName string) *ServiceCollector {
@@ -30,16 +29,11 @@ func (c *ServiceCollector) Describe(ch chan<- *prometheus.Desc) {
 
 func (c *ServiceCollector) Collect(ch chan<- prometheus.Metric) {
 	active := checkServiceActive(c.serviceName)
-	c.isActive = active
 	val := 0.0
 	if active {
 		val = 1.0
 	}
 	ch <- prometheus.MustNewConstMetric(c.upDesc, prometheus.GaugeValue, val)
-}
-
-func (c *ServiceCollector) IsActive() bool {
-	return c.isActive
 }
 
 func checkServiceActive(service string) bool {
