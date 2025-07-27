@@ -1,6 +1,7 @@
 package main
 
 import (
+	"bytes"
 	"flag"
 	"fmt"
 	"log"
@@ -9,6 +10,8 @@ import (
 	"os/exec"
 	"path/filepath"
 	"strings"
+	"sync"
+	"time"
 
 	"github.com/prometheus/client_golang/prometheus"
 	"github.com/prometheus/client_golang/prometheus/promhttp"
@@ -19,6 +22,12 @@ var (
 	mode   string
 	port   string
 	logDir string
+
+	// 캐시 관련 변수
+	metricsCache      []byte
+	metricsCacheTime  time.Time
+	metricsCacheMutex sync.Mutex
+	cacheDuration     = 15 * time.Second
 )
 
 func init() {
@@ -60,26 +69,59 @@ func main() {
 		log.Printf("vswitchd.service is NOT active — skipping vswitch collectors")
 	} else {
 		log.Printf("vswitchd.service is active — registering collectors for mode '%s'", mode)
-		// 공통 세그먼트 콜렉터 등록
 		prometheus.MustRegister(collector.NewSegmentCollector(mode))
 
-		// 모드별 collector 등록
 		switch mode {
 		case "gtor":
 			prometheus.MustRegister(collector.NewEthStatsCollector())
 		case "snat", "dhcp":
-			// 아직 별도 collector가 없으면 생략 가능
+			// 생략
 		default:
 			log.Fatalf("unknown mode: %s", mode)
 		}
 	}
 
-	// vswitchd 상태 collector는 항상 등록
 	prometheus.MustRegister(collector.NewServiceCollector("vswitchd.service"))
 
 	log.Printf("Starting tvs-exporter in mode '%s' on :%s", mode, port)
-	http.Handle("/metrics", promhttp.Handler())
+	http.HandleFunc("/metrics", metricsHandler)
 	log.Fatal(http.ListenAndServe(":"+port, nil))
+}
+
+func metricsHandler(w http.ResponseWriter, r *http.Request) {
+	metricsCacheMutex.Lock()
+	defer metricsCacheMutex.Unlock()
+
+	now := time.Now()
+	if metricsCache != nil && now.Sub(metricsCacheTime) < cacheDuration {
+		// 캐시 사용
+		w.Header().Set("Content-Type", "text/plain; version=0.0.4")
+		w.Write(metricsCache)
+		return
+	}
+
+	// 새로 생성
+	var buf bytes.Buffer
+	recorder := &responseRecorder{ResponseWriter: w, buf: &buf}
+	promhttp.Handler().ServeHTTP(recorder, r)
+
+	metricsCache = buf.Bytes()
+	metricsCacheTime = now
+
+	// 실제 응답
+	w.Header().Set("Content-Type", "text/plain; version=0.0.4")
+	w.Write(metricsCache)
+}
+
+// promhttp가 직접 w에 쓰는 것을 가로채기 위한 래퍼
+type responseRecorder struct {
+	http.ResponseWriter
+	buf *bytes.Buffer
+}
+
+func (r *responseRecorder) Write(b []byte) (int, error) {
+	r.buf.Write(b)
+	return r.ResponseWriter.Write(b)
 }
 
 func checkVswitchdActive() bool {
