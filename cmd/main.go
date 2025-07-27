@@ -79,7 +79,7 @@ func main() {
 	reg := prometheus.NewRegistry()
 
 	// 항상 등록: vswitchd_up
-	serviceCollector := collector.NewServiceStatusCollector("vswitchd.service")
+	serviceCollector := collector.NewServiceCollector("vswitchd.service")
 	reg.MustRegister(serviceCollector)
 
 	if serviceCollector.IsActive() {
