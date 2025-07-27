@@ -19,9 +19,10 @@ import (
 )
 
 var (
-	mode   string
-	port   string
-	logDir string
+	mode               string
+	port               string
+	logDir             string
+	collectorEthstats  bool
 
 	// 캐시 관련 변수
 	metricsCache      []byte
@@ -34,6 +35,7 @@ func init() {
 	flag.StringVar(&mode, "mode", "", "Mode of exporter: gtor, snat, dhcp")
 	flag.StringVar(&port, "port", "9101", "Port to expose metrics")
 	flag.StringVar(&logDir, "logDir", "", "Directory to write logs to (e.g., /var/log/exporter)")
+	flag.BoolVar(&collectorEthstats, "collector.ethstats", false, "Enable the ethstats collector (default: disabled)")
 }
 
 func setupLogging() {
@@ -73,7 +75,12 @@ func main() {
 
 		switch mode {
 		case "gtor":
-			prometheus.MustRegister(collector.NewEthStatsCollector())
+			if collectorEthstats {
+				prometheus.MustRegister(collector.NewEthStatsCollector())
+				log.Println("[main] EthStatsCollector registered")
+			} else {
+				log.Println("[main] EthStatsCollector is disabled by flag")
+			}
 		case "snat", "dhcp":
 			// 생략
 		default:
