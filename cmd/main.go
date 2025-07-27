@@ -2,9 +2,12 @@ package main
 
 import (
 	"flag"
+	"fmt"
 	"log"
 	"net/http"
+	"os"
 	"os/exec"
+	"path/filepath"
 	"strings"
 
 	"github.com/prometheus/client_golang/prometheus"
@@ -13,16 +16,40 @@ import (
 )
 
 var (
-	mode string
-	port string
+	mode   string
+	port   string
+	logDir string
 )
 
 func init() {
 	flag.StringVar(&mode, "mode", "", "Mode of exporter: gtor, snat, dhcp")
 	flag.StringVar(&port, "port", "9101", "Port to expose metrics")
+	flag.StringVar(&logDir, "logDir", "", "Directory to write logs to (e.g., /var/log/exporter)")
+}
+
+func setupLogging() {
+	if logDir == "" {
+		return
+	}
+
+	if err := os.MkdirAll(logDir, 0755); err != nil {
+		fmt.Fprintf(os.Stderr, "Failed to create log directory: %v\n", err)
+		os.Exit(1)
+	}
+
+	logPath := filepath.Join(logDir, "tvs-exporter.log")
+	logFile, err := os.OpenFile(logPath, os.O_CREATE|os.O_WRONLY|os.O_APPEND, 0644)
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "Failed to open log file: %v\n", err)
+		os.Exit(1)
+	}
+
+	log.SetOutput(logFile)
+	log.SetFlags(log.LstdFlags | log.Lshortfile)
 }
 
 func main() {
+	setupLogging()
 	flag.Parse()
 
 	if mode == "" {

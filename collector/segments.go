@@ -10,6 +10,8 @@ import (
 	"github.com/prometheus/client_golang/prometheus"
 )
 
+var segmentLog = log.New(os.Stderr, "[SegmentCollector] ", log.LstdFlags)
+
 type SegmentCollector struct {
 	component     string
 	segment       *prometheus.Desc
@@ -46,13 +48,13 @@ func (c *SegmentCollector) Collect(ch chan<- prometheus.Metric) {
 	cmd := exec.CommandContext(ctx, "vswitch", c.component, "list.segments")
 	out, err := cmd.Output()
 	if err != nil {
-		log.Printf("[SegmentCollector] Failed to execute 'vswitch %s list.segments': %v", c.component, err)
+		segmentLog.Printf("Failed to execute 'vswitch %s list.segments': %v", c.component, err)
 		c.collectErrors.WithLabelValues(c.component).Inc()
 		c.collectErrors.Collect(ch)
 		return
 	}
 
 	lines := strings.Count(strings.TrimSpace(string(out)), "\n")
-	log.Printf("[SegmentCollector] Collected %d segments for component: %s", lines, c.component)
+	segmentLog.Printf("Collected %d segments for component: %s", lines, c.component)
 	ch <- prometheus.MustNewConstMetric(c.segment, prometheus.GaugeValue, float64(lines), c.component)
 }

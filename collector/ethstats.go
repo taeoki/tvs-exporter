@@ -4,12 +4,17 @@ import (
 	"bufio"
 	"bytes"
 	"log"
+	"os"
 	"os/exec"
+	"path/filepath"
 	"strconv"
 	"strings"
+	"time"
 
 	"github.com/prometheus/client_golang/prometheus"
 )
+
+var ethstatsLog = log.New(os.Stderr, "[EthStatsCollector] ", log.LstdFlags)
 
 type EthStatsCollector struct {
 	rxPackets *prometheus.Desc
@@ -52,9 +57,10 @@ func (c *EthStatsCollector) Describe(ch chan<- *prometheus.Desc) {
 }
 
 func (c *EthStatsCollector) Collect(ch chan<- prometheus.Metric) {
+	ethstatsLog.Println("Collecting ethstats metrics...")
 	out, err := exec.Command("vswitch", "gtor", "dump.eth.stats").Output()
 	if err != nil {
-		log.Printf("Failed to run vswitch gtor dump.eth.stats: %v", err)
+		ethstatsLog.Printf("Failed to run vswitch gtor dump.eth.stats: %v", err)
 		return
 	}
 
@@ -75,34 +81,39 @@ func (c *EthStatsCollector) Collect(ch chan<- prometheus.Metric) {
 		case strings.HasPrefix(line, "HW RX Packets:"):
 			val := extractValue(line)
 			ch <- prometheus.MustNewConstMetric(c.rxPackets, prometheus.CounterValue, val, port)
-			
+			ethstatsLog.Printf("Collected metric for %s: vswitch_receive_packets_total = %f", port, val)
 		case strings.HasPrefix(line, "HW RX Bytes:"):
 			val := extractValue(line)
 			ch <- prometheus.MustNewConstMetric(c.rxBytes, prometheus.CounterValue, val, port)
-
+			ethstatsLog.Printf("Collected metric for %s: vswitch_receive_bytes_total = %f", port, val)
 		case strings.HasPrefix(line, "HW RX Missed:"):
 			val := extractValue(line)
 			ch <- prometheus.MustNewConstMetric(c.rxMissed, prometheus.CounterValue, val, port)
-
+			ethstatsLog.Printf("Collected metric for %s: vswitch_receive_missed_total = %f", port, val)
 		case strings.HasPrefix(line, "HW RX Errors:"):
 			val := extractValue(line)
 			ch <- prometheus.MustNewConstMetric(c.rxErrors, prometheus.CounterValue, val, port)
-
+			ethstatsLog.Printf("Collected metric for %s: vswitch_receive_errors_total = %f", port, val)
 		case strings.HasPrefix(line, "HW RX No Mbuf:"):
 			val := extractValue(line)
 			ch <- prometheus.MustNewConstMetric(c.rxNoMbuf, prometheus.CounterValue, val, port)
-
+			ethstatsLog.Printf("Collected metric for %s: vswitch_receive_no_mem_buffer_total = %f", port, val)
 		case strings.HasPrefix(line, "HW TX Packets:"):
 			val := extractValue(line)
 			ch <- prometheus.MustNewConstMetric(c.txPackets, prometheus.CounterValue, val, port)
-
+			ethstatsLog.Printf("Collected metric for %s: vswitch_transmit_packets_total = %f", port, val)
+		case strings.HasPrefix(line, "HW TX Bytes:"):
+			val := extractValue(line)
+			ch <- prometheus.MustNewConstMetric(c.txBytes, prometheus.CounterValue, val, port)
+			ethstatsLog.Printf("Collected metric for %s: vswitch_transmit_bytes_total = %f", port, val)
 		case strings.HasPrefix(line, "HW TX Missed:"):
 			val := extractValue(line)
 			ch <- prometheus.MustNewConstMetric(c.txMissed, prometheus.CounterValue, val, port)
-
+			ethstatsLog.Printf("Collected metric for %s: vswitch_transmit_missed_total = %f", port, val)
 		case strings.HasPrefix(line, "HW TX Errors:"):
 			val := extractValue(line)
 			ch <- prometheus.MustNewConstMetric(c.txErrors, prometheus.CounterValue, val, port)
+			ethstatsLog.Printf("Collected metric for %s: vswitch_transmit_errors_total = %f", port, val)
 		}
 	}
 }
@@ -114,7 +125,7 @@ func extractValue(line string) float64 {
 	}
 	val, err := strconv.ParseFloat(fields[len(fields)-1], 64)
 	if err != nil {
-		log.Printf("Failed to parse value from line '%s': %v", line, err)
+		ethstatsLog.Printf("Failed to parse value from line '%s': %v", line, err)
 		return 0
 	}
 	return val
