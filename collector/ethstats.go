@@ -14,8 +14,13 @@ import (
 type EthStatsCollector struct {
 	rxPackets *prometheus.Desc
 	rxBytes   *prometheus.Desc
+	rxMissed  *prometheus.Desc
+	rxErrors  *prometheus.Desc
+	rxNoMbuf  *prometheus.Desc
 	txPackets *prometheus.Desc
 	txBytes   *prometheus.Desc
+	txMissed  *prometheus.Desc
+	txErrors  *prometheus.Desc
 }
 
 func NewEthStatsCollector() *EthStatsCollector {
