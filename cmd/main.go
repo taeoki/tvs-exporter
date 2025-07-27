@@ -2,98 +2,64 @@ package main
 
 import (
 	"flag"
-	"fmt"
 	"log"
 	"net/http"
-	"os"
+	"os/exec"
+	"strings"
 
 	"github.com/prometheus/client_golang/prometheus"
 	"github.com/prometheus/client_golang/prometheus/promhttp"
-
 	"tvs-exporter/collector"
 )
 
 var (
-	mode   string
-	port   string
-	logDir string
+	mode string
+	port string
 )
 
 func init() {
 	flag.StringVar(&mode, "mode", "", "Mode of exporter: tor, snat, dhcp")
-	flag.StringVar(&port, "port", "9101", "Port to expose metrics on")
-	flag.StringVar(&logDir, "log", "", "Directory to write logs to (e.g., /var/log/buoy/)")
-
-	flag.Usage = func() {
-		fmt.Fprintf(flag.CommandLine.Output(), `Tvs-exporter: Prometheus exporter for VSwitch components
-
-Usage:
-  tvs-exporter --mode=<tor|snat|dhcp> [--port=<port>] [--log=<log_dir>]
-
-Flags:
-`)
-		flag.PrintDefaults()
-	}
-}
-
-func setupLogging() {
-	if logDir == "" {
-		log.SetOutput(os.Stderr)
-		return
-	}
-
-	if logDir[len(logDir)-1] != '/' {
-		logDir += "/"
-	}
-
-	if err := os.MkdirAll(logDir, 0755); err != nil {
-		fmt.Fprintf(os.Stderr, "Failed to create log directory: %v\n", err)
-		os.Exit(1)
-	}
-
-	logFile, err := os.OpenFile(logDir+"tvs-exporter.log", os.O_CREATE|os.O_WRONLY|os.O_APPEND, 0644)
-	if err != nil {
-		fmt.Fprintf(os.Stderr, "Failed to open log file: %v\n", err)
-		os.Exit(1)
-	}
-
-	log.SetOutput(logFile)
-	log.SetFlags(log.LstdFlags | log.Lshortfile)
+	flag.StringVar(&port, "port", "9101", "Port to expose metrics")
 }
 
 func main() {
 	flag.Parse()
-	setupLogging()
 
 	if mode == "" {
-		fmt.Fprintln(os.Stderr, "Error: --mode flag is required")
-		flag.Usage()
-		os.Exit(1)
+		log.Fatal("mode is required (tor, snat, dhcp)")
 	}
 
-	if mode == "tor" {
-		log.Println("Mode 'tor' detected, using 'gtor' internally")
-		mode = "gtor"
-	}
-
-	reg := prometheus.NewRegistry()
-
-	// 항상 등록: vswitchd_up
-	serviceCollector := collector.NewServiceCollector("vswitchd.service")
-	reg.MustRegister(serviceCollector)
-
-	if serviceCollector.IsActive() {
-		log.Println("vswitchd.service is active — registering collectors")
-		reg.MustRegister(collector.NewSegmentCollector(mode))
-		if mode == "gtor" {
-			reg.MustRegister(collector.NewEthStatsCollector())
-		}
+	if !checkVswitchdActive() {
+		log.Printf("vswitchd.service is NOT active — skipping vswitch collectors")
 	} else {
-		log.Println("vswitchd.service is NOT active — skipping vswitch collectors")
+		log.Printf("vswitchd.service is active — registering collectors for mode '%s'", mode)
+		// 공통 세그먼트 콜렉터 등록
+		prometheus.MustRegister(collector.NewSegmentCollector(mode))
+
+		// 모드별 collector 등록
+		switch mode {
+		case "tor":
+			prometheus.MustRegister(collector.NewEthStatsCollector())
+		case "snat", "dhcp":
+			// 아직 별도 collector가 없으면 생략 가능
+		default:
+			log.Fatalf("unknown mode: %s", mode)
+		}
 	}
 
-	http.Handle("/metrics", promhttp.HandlerFor(reg, promhttp.HandlerOpts{}))
+	// vswitchd 상태 collector는 항상 등록
+	prometheus.MustRegister(collector.NewServiceCollector("vswitchd.service"))
 
 	log.Printf("Starting tvs-exporter in mode '%s' on :%s", mode, port)
+	http.Handle("/metrics", promhttp.Handler())
 	log.Fatal(http.ListenAndServe(":"+port, nil))
+}
+
+func checkVswitchdActive() bool {
+	out, err := exec.Command("systemctl", "is-active", "vswitchd.service").Output()
+	if err != nil {
+		log.Printf("Failed to check service status: %v", err)
+		return false
+	}
+	return strings.TrimSpace(string(out)) == "active"
 }
