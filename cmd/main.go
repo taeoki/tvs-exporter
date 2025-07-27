@@ -34,6 +34,11 @@ func main() {
 	} else {
 		log.Printf("vswitchd.service is active — registering collectors for mode '%s'", mode)
 		// 공통 세그먼트 콜렉터 등록
+		if mode == "tor" {
+			log.Println("Mode 'tor' detected, using 'gtor' internally")
+			mode = "gtor"
+		}
+		  
 		prometheus.MustRegister(collector.NewSegmentCollector(mode))
 
 		// 모드별 collector 등록
