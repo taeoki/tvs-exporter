@@ -3,6 +3,7 @@ package collector
 import (
 	"context"
 	"log"
+	"os"
 	"os/exec"
 	"strings"
 	"time"
