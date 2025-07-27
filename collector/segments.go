@@ -20,7 +20,7 @@ func NewSegmentCollector(component string) *SegmentCollector {
 	return &SegmentCollector{
 		component: component,
 		segment: prometheus.NewDesc(
-			"tvs_segment_total",
+			"vswitch_segment_count",
 			"Number of segments for given vswitch component",
 			[]string{"component"}, nil,
 		),

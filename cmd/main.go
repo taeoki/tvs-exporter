@@ -18,7 +18,7 @@ var (
 )
 
 func init() {
-	flag.StringVar(&mode, "mode", "", "Mode of exporter: tor, snat, dhcp")
+	flag.StringVar(&mode, "mode", "", "Mode of exporter: gtor, snat, dhcp")
 	flag.StringVar(&port, "port", "9101", "Port to expose metrics")
 }
 
@@ -26,7 +26,7 @@ func main() {
 	flag.Parse()
 
 	if mode == "" {
-		log.Fatal("mode is required (tor, snat, dhcp)")
+		log.Fatal("mode is required (gtor, snat, dhcp)")
 	}
 
 	if !checkVswitchdActive() {
@@ -34,11 +34,6 @@ func main() {
 	} else {
 		log.Printf("vswitchd.service is active — registering collectors for mode '%s'", mode)
 		// 공통 세그먼트 콜렉터 등록
-		if mode == "tor" {
-			log.Println("Mode 'tor' detected, using 'gtor' internally")
-			mode = "gtor"
-		}
-		  
 		prometheus.MustRegister(collector.NewSegmentCollector(mode))
 
 		// 모드별 collector 등록
