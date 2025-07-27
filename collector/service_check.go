@@ -9,49 +9,43 @@ import (
 
 type ServiceCollector struct {
 	serviceName string
-	desc        *prometheus.Desc
-	active      bool
+	upDesc      *prometheus.Desc
+	isActive    bool
 }
 
 func NewServiceCollector(serviceName string) *ServiceCollector {
 	return &ServiceCollector{
 		serviceName: serviceName,
-		desc: prometheus.NewDesc(
+		upDesc: prometheus.NewDesc(
 			"vswitchd_up",
-			"Whether the vswitchd.service is active (1 = active, 0 = inactive)",
+			"Whether the vswitchd.service is up (1) or not (0)",
 			nil, nil,
 		),
 	}
 }
 
 func (c *ServiceCollector) Describe(ch chan<- *prometheus.Desc) {
-	ch <- c.desc
+	ch <- c.upDesc
 }
 
 func (c *ServiceCollector) Collect(ch chan<- prometheus.Metric) {
-	status := checkServiceActive(c.serviceName)
-	var value float64
-	if status {
-		value = 1
-		c.active = true
-	} else {
-		value = 0
-		c.active = false
+	active := checkServiceActive(c.serviceName)
+	c.isActive = active
+	val := 0.0
+	if active {
+		val = 1.0
 	}
-	ch <- prometheus.MustNewConstMetric(c.desc, prometheus.GaugeValue, value)
+	ch <- prometheus.MustNewConstMetric(c.upDesc, prometheus.GaugeValue, val)
 }
 
-// checkServiceActive returns true if systemd service is active
+func (c *ServiceCollector) IsActive() bool {
+	return c.isActive
+}
+
 func checkServiceActive(service string) bool {
-	cmd := exec.Command("systemctl", "is-active", service)
-	out, err := cmd.Output()
+	out, err := exec.Command("systemctl", "is-active", service).Output()
 	if err != nil {
 		return false
 	}
 	return strings.TrimSpace(string(out)) == "active"
-}
-
-// IsActive returns current state after Collect()
-func (c *ServiceCollector) IsActive() bool {
-	return c.active
 }
