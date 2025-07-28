@@ -1,42 +1,61 @@
 package collector
 
 import (
+	"context"
+	"log"
+	"os"
 	"os/exec"
-	"strconv"
 	"strings"
+	"time"
 
 	"github.com/prometheus/client_golang/prometheus"
 )
 
+var segmentLog = log.New(os.Stderr, "[SegmentCollector] ", log.LstdFlags)
+
 type SegmentCollector struct {
-	component string
-	segment   *prometheus.Desc
+	component     string
+	segment       *prometheus.Desc
+	collectErrors *prometheus.CounterVec
 }
 
 func NewSegmentCollector(component string) *SegmentCollector {
 	return &SegmentCollector{
 		component: component,
 		segment: prometheus.NewDesc(
-			"tvs_segment_total",
+			"vswitch_segment_count",
 			"Number of segments for given vswitch component",
 			[]string{"component"}, nil,
+		),
+		collectErrors: prometheus.NewCounterVec(
+			prometheus.CounterOpts{
+				Name: "tvs_segment_collect_errors_total",
+				Help: "Total number of errors while collecting segment count",
+			},
+			[]string{"component"},
 		),
 	}
 }
 
 func (c *SegmentCollector) Describe(ch chan<- *prometheus.Desc) {
 	ch <- c.segment
+	c.collectErrors.Describe(ch)
 }
 
 func (c *SegmentCollector) Collect(ch chan<- prometheus.Metric) {
-	cmd := exec.Command("sh", "-c", "vswitch "+c.component+" list.segments | wc -l")
+	ctx, cancel := context.WithTimeout(context.Background(), 2*time.Second)
+	defer cancel()
+  
+	cmd := exec.CommandContext(ctx, "vswitch", c.component, "list.segments")
 	out, err := cmd.Output()
 	if err != nil {
+		segmentLog.Printf("Failed to execute 'vswitch %s list.segments': %v", c.component, err)
+		c.collectErrors.WithLabelValues(c.component).Inc()
+		c.collectErrors.Collect(ch)
 		return
 	}
-	val, err := strconv.Atoi(strings.TrimSpace(string(out)))
-	if err != nil {
-		return
-	}
-	ch <- prometheus.MustNewConstMetric(c.segment, prometheus.GaugeValue, float64(val), c.component)
+
+	lines := strings.Count(strings.TrimSpace(string(out)), "\n")
+	segmentLog.Printf("Collected %d segments for component: %s", lines, c.component)
+	ch <- prometheus.MustNewConstMetric(c.segment, prometheus.GaugeValue, float64(lines), c.component)
 }

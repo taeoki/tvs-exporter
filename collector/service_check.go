@@ -1,23 +1,45 @@
 package collector
 
 import (
-	"fmt"
 	"os/exec"
 	"strings"
+
+	"github.com/prometheus/client_golang/prometheus"
 )
 
-// CheckServiceActive returns an error if the service is not active
-func CheckServiceActive(serviceName string) error {
-	cmd := exec.Command("systemctl", "is-active", serviceName)
-	output, err := cmd.Output()
+type ServiceCollector struct {
+	serviceName string
+	upDesc      *prometheus.Desc
+}
+
+func NewServiceCollector(serviceName string) *ServiceCollector {
+	return &ServiceCollector{
+		serviceName: serviceName,
+		upDesc: prometheus.NewDesc(
+			"vswitchd_up",
+			"Whether the vswitchd.service is up (1) or not (0)",
+			nil, nil,
+		),
+	}
+}
+
+func (c *ServiceCollector) Describe(ch chan<- *prometheus.Desc) {
+	ch <- c.upDesc
+}
+
+func (c *ServiceCollector) Collect(ch chan<- prometheus.Metric) {
+	active := checkServiceActive(c.serviceName)
+	val := 0.0
+	if active {
+		val = 1.0
+	}
+	ch <- prometheus.MustNewConstMetric(c.upDesc, prometheus.GaugeValue, val)
+}
+
+func checkServiceActive(service string) bool {
+	out, err := exec.Command("systemctl", "is-active", service).Output()
 	if err != nil {
-		return fmt.Errorf("failed to check service status: %v", err)
+		return false
 	}
-
-	status := strings.TrimSpace(string(output))
-	if status != "active" {
-		return fmt.Errorf("service %s is not active (status: %s)", serviceName, status)
-	}
-
-	return nil
+	return strings.TrimSpace(string(out)) == "active"
 }
