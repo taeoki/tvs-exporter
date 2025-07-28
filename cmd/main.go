@@ -60,8 +60,8 @@ func setupLogging() {
 }
 
 func main() {
-	setupLogging()
 	flag.Parse()
+	setupLogging()
 
 	if mode == "" {
 		log.Fatal("mode is required (gtor, snat, dhcp)")
